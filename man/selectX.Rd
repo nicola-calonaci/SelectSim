@@ -18,7 +18,10 @@ selectX(
   verbose = TRUE,
   estimate_pairwise = FALSE,
   maxFDR = 0.25,
-  seed = 42
+  seed = 42,
+  clonality = FALSE,
+  clonality.null = c("conditional", "joint"),
+  min.overlap = 3
 )
 }
 \arguments{
@@ -49,9 +52,29 @@ selectX(
 \item{maxFDR}{FDR value}
 
 \item{seed}{a random seed}
+
+\item{clonality}{Logical; if \code{TRUE} the matrices in \code{M$M} are
+three-state matrices (0 = absent, 1 = subclonal, 2 = clonal) and, in addition
+to co-occurrence / mutual exclusivity, SelectSim tests co-clonality,
+co-subclonality and partial mutual exclusivity (discordant clonality); see
+\code{\link{clonality_patterns}}. The TMB data frames may include
+\code{clonal} and \code{subclonal} columns with clonal and subclonal counts
+of mutations not included in \code{M} (e.g. non-driver mutations), used to
+correct for the sample clonal propensity; without them no correction is applied.}
+
+\item{clonality.null}{\code{"conditional"} (default): clonal labels are
+re-assigned on the observed alterations, so clonality patterns are tested
+given co-occurrence. \code{"joint"}: labels are assigned on the simulated
+alterations of the binary null model.}
+
+\item{min.overlap}{Minimum number of samples with both alterations present
+for a pair to be tested for clonality patterns.}
 }
 \value{
-result  a SelectSim object with background model and other info along with result table
+result  a SelectSim object with background model and other info along with result table.
+With \code{clonality = TRUE} the list also contains \code{clonality}, a
+long-format table with one row per pair and clonality pattern (see
+\code{\link{clonality.table}}).
 }
 \description{
 \code{selectX()} takes a list object which consist of genome alteration matrix and tumor mutation burden.

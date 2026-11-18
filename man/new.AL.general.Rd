@@ -9,7 +9,8 @@ new.AL.general(
   feat.covariates = NULL,
   sample.covariates = NULL,
   min.freq,
-  verbose = FALSE
+  verbose = FALSE,
+  clonality = FALSE
 )
 }
 \arguments{
@@ -32,6 +33,19 @@ greater than) to be retained. Features with \code{rowSums <= min.freq} are
 dropped.}
 
 \item{verbose}{Logical; print progress messages.}
+
+\item{clonality}{Logical; if \code{TRUE} the matrices in \code{M} are three-state
+matrices with 0 = absent, 1 = subclonal, 2 = clonal. Values in (1, 2) encode
+a clonal probability p = value - 1 (uncertain calls), and NA marks a present
+alteration whose clonality is excluded from the clonality tests (e.g. an
+ambiguous call); NA entries still count as present for co-occurrence and
+mutual exclusivity. Matrices of different alteration types are merged per
+entry (clonal if any alteration is clonal), and the
+result is stored in \code{al$clonality$state} together with the per-sample
+clonal propensity (see \code{\link{sample_clonal_propensity}}). The TMB data
+frames may carry optional \code{clonal} and \code{subclonal} columns, counting
+mutations not included in the GAM, to correct for sample clonal propensity. If
+\code{FALSE} (default) any non-zero entry is treated as an alteration.}
 }
 \value{
 An Alteration Landscape (AL) object (list of class \code{"AL"}) containing

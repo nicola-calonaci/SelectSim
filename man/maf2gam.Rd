@@ -13,7 +13,12 @@ maf2gam(
   genes = NULL,
   fun.aggregate = length,
   binarize = TRUE,
-  fill = NA
+  fill = NA,
+  ccf.col = NULL,
+  clonal.threshold = 0.9,
+  clonality.col = NULL,
+  clonal.labels = c("clonal", "Clonal", "CLONAL"),
+  clonal.prob.col = NULL
 )
 }
 \arguments{
@@ -34,9 +39,32 @@ maf2gam(
 \item{binarize}{If TRUE, convert aggregated counts to binary presence/absence}
 
 \item{fill}{Value used for missing (sample, gene) combinations}
+
+\item{ccf.col}{Optional column with the cancer cell fraction (CCF) of each
+mutation. When given (or when \code{clonality.col} is given) a three-state
+matrix is returned: 0 = absent, 1 = subclonal, 2 = clonal. A mutation is
+clonal when its CCF is \code{>= clonal.threshold}.}
+
+\item{clonal.threshold}{CCF threshold used to call a mutation clonal.}
+
+\item{clonality.col}{Optional column with a clonality label per mutation
+(alternative to \code{ccf.col}); mutations whose label is in
+\code{clonal.labels} are clonal, the others subclonal.}
+
+\item{clonal.labels}{Values of \code{clonality.col} meaning clonal.}
+
+\item{clonal.prob.col}{Optional column with the probability that each
+mutation is clonal (alternative to \code{ccf.col}, to propagate the
+uncertainty of the clonality call). The returned state is \code{1 + p};
+\code{NA} probabilities mark mutations whose clonality is excluded.}
 }
 \value{
-Numeric matrix (samples x genes) representing the gene alteration matrix.
+Numeric matrix (samples x genes) representing the gene alteration
+matrix. In clonality mode several mutations of the same gene in a sample are
+merged as "clonal if any mutation is clonal": the highest state for hard
+calls, \eqn{1 - \prod_i (1 - p_i)} for clonal probabilities; a cell with no
+certainly clonal mutation and at least one mutation of unknown or excluded
+clonality is \code{NA}; cells without mutations are 0.
 }
 \description{
 \code{maf2gam()} takes a maf file and converts into gam

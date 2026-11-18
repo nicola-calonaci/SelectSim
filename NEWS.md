@@ -1,3 +1,28 @@
+# SelectSim (development version)
+
+* New three-state mode (`selectX(..., clonality = TRUE)`): alteration matrices
+  encode 0 = absent, 1 = subclonal, 2 = clonal, and SelectSim additionally tests
+  co-clonality (`CC`), co-subclonality (`SS`), directional partial mutual
+  exclusivity (`CS`, `SC`) and discordant clonality (`DISC`). Results are
+  returned in `result$clonality`; `result$result` (co-occurrence / mutual
+  exclusivity) is unchanged.
+* New clonality null model (`clonality_null_model()`) preserving per-gene clonal
+  and subclonal counts and correcting for the per-sample clonal propensity
+  (`sample_clonal_propensity()`); `clonality.null = "conditional"` (default,
+  tests clonality given co-occurrence) or `"joint"`.
+* New `clonality.table()`, `clonality_patterns()` and `maf2clonal_tmb()`.
+* `maf2gam()` gains `ccf.col` / `clonal.threshold` and `clonality.col` /
+  `clonal.labels` to build three-state matrices.
+* `new.AL.general()` binarises each alteration-type matrix (no change for 0/1 input).
+* Uncertain clonality: states in (1, 2) encode a clonal probability (1 + p) that
+  is propagated to the clonality tests (expected counts; the null re-assigns the
+  sorted per-gene probabilities along the residual ranking, identical to the
+  hard-call null for p in {0, 1}); NA marks present alterations whose clonality
+  is excluded from the clonality tests. `maf2gam()` and `maf2clonal_tmb()` gain
+  `clonal.prob.col`. The clonality FDR uses standardised effect sizes (`zES`,
+  `zFDR`), and the sample clonal propensity is only estimated from independent
+  (non-GAM) clonal/subclonal counts.
+
 # SelectSim 0.1.6
 
 * Removed `reshape2` dependency; replaced with base R equivalents (`tapply`, `as.data.frame.table`).

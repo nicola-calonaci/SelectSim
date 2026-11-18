@@ -391,7 +391,25 @@ stat_maf_gene <- function(maf, column = "Hugo_Symbol", ...) {
 #' @param fun.aggregate Aggregation function applied per (sample, gene) cell
 #' @param binarize If TRUE, convert aggregated counts to binary presence/absence
 #' @param fill Value used for missing (sample, gene) combinations
-#' @return Numeric matrix (samples x genes) representing the gene alteration matrix.
+#' @param ccf.col Optional column with the cancer cell fraction (CCF) of each
+#'   mutation. When given (or when \code{clonality.col} is given) a three-state
+#'   matrix is returned: 0 = absent, 1 = subclonal, 2 = clonal. A mutation is
+#'   clonal when its CCF is \code{>= clonal.threshold}.
+#' @param clonal.threshold CCF threshold used to call a mutation clonal.
+#' @param clonality.col Optional column with a clonality label per mutation
+#'   (alternative to \code{ccf.col}); mutations whose label is in
+#'   \code{clonal.labels} are clonal, the others subclonal.
+#' @param clonal.labels Values of \code{clonality.col} meaning clonal.
+#' @param clonal.prob.col Optional column with the probability that each
+#'   mutation is clonal (alternative to \code{ccf.col}, to propagate the
+#'   uncertainty of the clonality call). The returned state is \code{1 + p};
+#'   \code{NA} probabilities mark mutations whose clonality is excluded.
+#' @return Numeric matrix (samples x genes) representing the gene alteration
+#'   matrix. In clonality mode several mutations of the same gene in a sample are
+#'   merged as "clonal if any mutation is clonal": the highest state for hard
+#'   calls, \eqn{1 - \prod_i (1 - p_i)} for clonal probabilities; a cell with no
+#'   certainly clonal mutation and at least one mutation of unknown or excluded
+#'   clonality is \code{NA}; cells without mutations are 0.
 #'
 #' @examples
 #' data(luad_maf, package = "SelectSim")
@@ -411,8 +429,22 @@ maf2gam <- function(maf,
                     genes = NULL,
                     fun.aggregate = length,
                     binarize = TRUE,
-                    fill = NA) {
-  mut_gam <- tapply(maf[[value.var]], list(maf[[sample.col]], maf[[gene.col]]), FUN = fun.aggregate)
+                    fill = NA,
+                    ccf.col = NULL,
+                    clonal.threshold = 0.9,
+                    clonality.col = NULL,
+                    clonal.labels = c("clonal", "Clonal", "CLONAL"),
+                    clonal.prob.col = NULL) {
+  if (!is.null(ccf.col) || !is.null(clonality.col) || !is.null(clonal.prob.col)) {
+    st <- mutation_clonal_state(maf, ccf.col, clonal.threshold, clonality.col, clonal.labels, clonal.prob.col)
+    merge_state <- function(x) {
+      if (any(x == 2, na.rm = TRUE)) 2 else if (anyNA(x)) NA_real_ else 2 - prod(2 - x)
+    }
+    mut_gam <- tapply(st, list(maf[[sample.col]], maf[[gene.col]]), FUN = merge_state, default = 0)
+    binarize <- FALSE
+  } else {
+    mut_gam <- tapply(maf[[value.var]], list(maf[[sample.col]], maf[[gene.col]]), FUN = fun.aggregate)
+  }
   if (binarize) {
     if (mode(mut_gam) == "character") {
       mut_gam <- mut_gam != ""
@@ -443,4 +475,82 @@ maf2gam <- function(maf,
     mut_gam <- cbind(mut_gam, voidadd)
   }
   return(mut_gam)
+}
+
+#' Per-sample clonal and subclonal mutation burden
+#'
+#' @description
+#' Builds a TMB data frame for \code{selectX(..., clonality = TRUE)} with columns
+#' \code{sample}, \code{mutation} (all mutations), \code{clonal} and
+#' \code{subclonal}. To estimate the sample clonal propensity without leaking
+#' the tested signal into the null, pass a MAF without the alterations used in
+#' the GAM (e.g. all non-driver mutations).
+#' Mutations with unknown clonality are counted in \code{mutation} only. With
+#' \code{clonal.prob.col}, \code{clonal} and \code{subclonal} are expected
+#' counts (sums of \eqn{p} and \eqn{1 - p}).
+#'
+#' @param maf A MAF dataframe.
+#' @param samples Vector of sample IDs (samples absent from the MAF get 0).
+#' @param sample.col Column name for sample IDs.
+#' @param ccf.col Column with the cancer cell fraction of each mutation.
+#' @param clonal.threshold CCF threshold used to call a mutation clonal.
+#' @param clonality.col Alternative to \code{ccf.col}: column with clonality labels.
+#' @param clonal.labels Values of \code{clonality.col} meaning clonal.
+#' @param clonal.prob.col Alternative to \code{ccf.col}: column with the
+#'   probability that each mutation is clonal.
+#' @return Data frame with one row per sample (rownames = sample IDs).
+#'
+#' @examples
+#' maf <- data.frame(Tumor_Sample_Barcode = c("s1", "s1", "s2"),
+#'                   ccf = c(1, 0.3, 0.95))
+#' maf2clonal_tmb(maf, samples = c("s1", "s2", "s3"), ccf.col = "ccf")
+#'
+#' @export
+maf2clonal_tmb <- function(maf,
+                           samples = NULL,
+                           sample.col = "Tumor_Sample_Barcode",
+                           ccf.col = NULL,
+                           clonal.threshold = 0.9,
+                           clonality.col = NULL,
+                           clonal.labels = c("clonal", "Clonal", "CLONAL"),
+                           clonal.prob.col = NULL) {
+  if (is.null(ccf.col) && is.null(clonality.col) && is.null(clonal.prob.col)) {
+    stop("Provide ccf.col, clonality.col or clonal.prob.col.")
+  }
+  st <- mutation_clonal_state(maf, ccf.col, clonal.threshold, clonality.col, clonal.labels, clonal.prob.col)
+  s <- as.character(maf[[sample.col]])
+  if (is.null(samples)) samples <- unique(s)
+  sum_in <- function(w) {
+    w[is.na(w)] <- 0
+    as.vector(tapply(w, factor(s, levels = samples), sum, default = 0))
+  }
+  out <- data.frame(
+    sample = samples,
+    mutation = sum_in(rep(1, length(s))),
+    clonal = sum_in(st - 1),
+    subclonal = sum_in(2 - st),
+    stringsAsFactors = FALSE
+  )
+  rownames(out) <- samples
+  return(out)
+}
+
+#' Per-mutation clonal state from a MAF
+#'
+#' @return Numeric vector: 2 clonal, 1 subclonal, 1 + p for a clonal
+#'   probability p, NA unknown / excluded.
+#' @noRd
+mutation_clonal_state <- function(maf, ccf.col = NULL, clonal.threshold = 0.9,
+                                  clonality.col = NULL, clonal.labels = "clonal",
+                                  clonal.prob.col = NULL) {
+  if (!is.null(clonal.prob.col)) {
+    p <- as.numeric(maf[[clonal.prob.col]])
+    if (any(p < 0 | p > 1, na.rm = TRUE)) stop("clonal.prob.col must contain probabilities in [0, 1].")
+    return(1 + p)
+  }
+  if (!is.null(ccf.col)) {
+    return(ifelse(as.numeric(maf[[ccf.col]]) >= clonal.threshold, 2, 1))
+  }
+  lab <- maf[[clonality.col]]
+  ifelse(is.na(lab), NA, ifelse(lab %in% clonal.labels, 2, 1))
 }

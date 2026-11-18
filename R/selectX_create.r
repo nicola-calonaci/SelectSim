@@ -25,6 +25,18 @@
 #'   greater than) to be retained. Features with \code{rowSums <= min.freq} are
 #'   dropped.
 #' @param verbose Logical; print progress messages.
+#' @param clonality Logical; if \code{TRUE} the matrices in \code{M} are three-state
+#'   matrices with 0 = absent, 1 = subclonal, 2 = clonal. Values in (1, 2) encode
+#'   a clonal probability p = value - 1 (uncertain calls), and NA marks a present
+#'   alteration whose clonality is excluded from the clonality tests (e.g. an
+#'   ambiguous call); NA entries still count as present for co-occurrence and
+#'   mutual exclusivity. Matrices of different alteration types are merged per
+#'   entry (clonal if any alteration is clonal), and the
+#'   result is stored in \code{al$clonality$state} together with the per-sample
+#'   clonal propensity (see \code{\link{sample_clonal_propensity}}). The TMB data
+#'   frames may carry optional \code{clonal} and \code{subclonal} columns, counting
+#'   mutations not included in the GAM, to correct for sample clonal propensity. If
+#'   \code{FALSE} (default) any non-zero entry is treated as an alteration.
 #' @return An Alteration Landscape (AL) object (list of class \code{"AL"}) containing
 #'   the filtered alteration matrices, TMB vectors, and covariate assignments.
 #'
@@ -44,7 +56,8 @@ new.AL.general <- function(am,
                            feat.covariates = NULL,
                            sample.covariates = NULL,
                            min.freq,
-                           verbose = FALSE) {
+                           verbose = FALSE,
+                           clonality = FALSE) {
   if (is.null(am$M)) stop("am$M is NULL: provide a named list of alteration matrices.")
   if (is.null(am$tmb)) stop("am$tmb is NULL: provide a named list of TMB data frames.")
   if (!all(names(am$M) %in% names(am$tmb))) {
@@ -71,9 +84,17 @@ new.AL.general <- function(am,
   # Keep the order of rownames and colnames as in first gam.
   row.order <- sort(rownames(am$M[[1]])) # fixed gene ordering issuses
   col.order <- colnames(am$M[[1]])
+  state <- NULL
   for (i in names(am$M)) {
-    al$am[[i]] <- as.matrix(am$M[[i]][row.order, col.order])
-    al$am[["full"]] <- al$am[["full"]] + as.matrix(am$M[[i]][row.order, col.order])
+    m <- as.matrix(am$M[[i]][row.order, col.order])
+    if (clonality) {
+      check_state_matrix(m, i)
+      state <- if (is.null(state)) m else merge_states(state, m)
+      m[is.na(m)] <- 1 # NA = present with excluded clonality
+    }
+    m[m > 0] <- 1 # presence of this alteration type (no-op for binary input)
+    al$am[[i]] <- m
+    al$am[["full"]] <- al$am[["full"]] + m
   }
   al$am[["full"]][al$am[["full"]] >= 1] <- 1 # binarize
 
@@ -85,6 +106,9 @@ new.AL.general <- function(am,
   feat <- rownames(al$am$full[rowSums(al$am$full) > min.freq, ])
   for (i in names(al$am)) {
     al$am[[i]] <- al$am[[i]][feat, ]
+  }
+  if (clonality) {
+    state <- state[feat, , drop = FALSE]
   }
   if (verbose) {
     print(paste("Number of features after filtering:", nrow(al$am$full), sep = " "))
@@ -114,6 +138,22 @@ new.AL.general <- function(am,
     al$tmb[["total"]] <- al$tmb[["total"]] + am$tmb[[i]][, c("mutation")]
   }
   names(al$tmb$total) <- am$tmb[[1]]$sample
+
+  if (clonality) {
+    al$clonality <- list(
+      state = state,
+      sample.propensity = sample_clonal_propensity(state, am$tmb)
+    )
+    if (verbose) {
+      kn <- !is.na(state) & state > 0
+      print(paste(
+        "Clonal alterations (expected):", round(sum(state[kn] - 1), 1),
+        "- subclonal (expected):", round(sum(2 - state[kn]), 1),
+        "- clonality excluded:", sum(is.na(state))
+      ))
+      print(paste("Sample clonal propensity estimated from:", attr(al$clonality$sample.propensity, "source")))
+    }
+  }
 
   class(al) <- "AL"
   return(al)

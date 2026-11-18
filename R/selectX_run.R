@@ -37,7 +37,24 @@
 #' @param estimate_pairwise Compute pairwise p-value
 #' @param maxFDR FDR value
 #' @param seed a random seed
-#' @return result  a SelectSim object with background model and other info along with result table
+#' @param clonality Logical; if \code{TRUE} the matrices in \code{M$M} are
+#'   three-state matrices (0 = absent, 1 = subclonal, 2 = clonal) and, in addition
+#'   to co-occurrence / mutual exclusivity, SelectSim tests co-clonality,
+#'   co-subclonality and partial mutual exclusivity (discordant clonality); see
+#'   \code{\link{clonality_patterns}}. The TMB data frames may include
+#'   \code{clonal} and \code{subclonal} columns with clonal and subclonal counts
+#'   of mutations not included in \code{M} (e.g. non-driver mutations), used to
+#'   correct for the sample clonal propensity; without them no correction is applied.
+#' @param clonality.null \code{"conditional"} (default): clonal labels are
+#'   re-assigned on the observed alterations, so clonality patterns are tested
+#'   given co-occurrence. \code{"joint"}: labels are assigned on the simulated
+#'   alterations of the binary null model.
+#' @param min.overlap Minimum number of samples with both alterations present
+#'   for a pair to be tested for clonality patterns.
+#' @return result  a SelectSim object with background model and other info along with result table.
+#'   With \code{clonality = TRUE} the list also contains \code{clonality}, a
+#'   long-format table with one row per pair and clonality pattern (see
+#'   \code{\link{clonality.table}}).
 #'
 #' @examples
 #' \donttest{
@@ -68,7 +85,11 @@ selectX <- function(M,
                     verbose = TRUE,
                     estimate_pairwise = FALSE,
                     maxFDR = 0.25,
-                    seed = 42) {
+                    seed = 42,
+                    clonality = FALSE,
+                    clonality.null = c("conditional", "joint"),
+                    min.overlap = 3) {
+  clonality.null <- match.arg(clonality.null)
   set.seed(seed)
   use_tictoc <- verbose && requireNamespace("tictoc", quietly = TRUE)
   if (verbose) {
@@ -80,7 +101,7 @@ selectX <- function(M,
     print(paste("Step1-> Parsing and Filtering GAM..."))
     if (use_tictoc) tictoc::tic("Time:")
   }
-  al <- new.AL.general(M, alteration.class, sample.class, min.freq, verbose)
+  al <- new.AL.general(M, alteration.class, sample.class, min.freq, verbose, clonality = clonality)
   if (verbose) {
     print(paste("-> Alteration Landscape object created"))
     if (use_tictoc) tictoc::toc()
@@ -154,13 +175,36 @@ selectX <- function(M,
     print(paste("#### EDs computed ####"))
   }
 
+  clonality_result <- NULL
+  if (clonality) {
+    if (verbose) {
+      print(paste("#### Testing clonality patterns (", clonality.null, " null) ####", sep = ""))
+      if (use_tictoc) tictoc::tic("Time:")
+    }
+    obj$clonal.null <- clonality_null_model(al,
+      null = obj$null, mode = clonality.null,
+      n.permut = obj$nSim, seed = seed
+    )
+    clonality_result <- clonality.table(al,
+      W = obj$W$W, clonal.null = obj$clonal.null,
+      maxFDR = maxFDR, min.overlap = min.overlap
+    )
+    if (verbose) {
+      if (use_tictoc) tictoc::toc()
+      print(paste("#### Clonality patterns computed ####"))
+    }
+  }
+
   if (use_tictoc) tictoc::toc()
 
   if (save.object) {
     saveRDS(obj, file = paste(folder, "selectsim_object.rds", sep = ""))
     saveRDS(selectX_result, file = paste(folder, "selectsim_results.rds", sep = ""))
+    if (clonality) saveRDS(clonality_result, file = paste(folder, "selectsim_clonality_results.rds", sep = ""))
   }
-  return(list(obj = obj, result = selectX_result))
+  out <- list(obj = obj, result = selectX_result)
+  if (clonality) out$clonality <- clonality_result
+  return(out)
 }
 
 ## usethis namespace: start

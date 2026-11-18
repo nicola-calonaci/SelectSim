@@ -10,6 +10,9 @@ export(am.pairwise.alteration.overlap)
 export(am.stats)
 export(am.weight.pairwise.alteration.overlap)
 export(binary.yule)
+export(clonality.table)
+export(clonality_null_model)
+export(clonality_patterns)
 export(effectSize)
 export(estimateFDR2)
 export(estimate_p_val)
@@ -29,6 +32,7 @@ export(generateW_block)
 export(generateW_mean_tmb)
 export(get.blocks)
 export(interaction.table)
+export(maf2clonal_tmb)
 export(maf2gam)
 export(mutation_type)
 export(new.AL.general)
@@ -42,6 +46,7 @@ export(r.effectSize)
 export(retrieveOutliers)
 export(ridge_plot_ed)
 export(ridge_plot_ed_compare)
+export(sample_clonal_propensity)
 export(selectX)
 export(stat_maf_column)
 export(stat_maf_gene)
@@ -55,27 +60,35 @@ import(foreach)
 import(ggplot2)
 import(ggpubr)
 import(ggridges)
-importFrom(Matrix,Matrix)
-importFrom(Matrix,sparseMatrix)
-importFrom(Matrix,t)
+importFrom(Matrix,
+  Matrix,
+  sparseMatrix,
+  t
+)
 importFrom(Rcpp,sourceCpp)
 importFrom(Rfast,rowSort)
-importFrom(dplyr,"%>%")
-importFrom(dplyr,arrange)
-importFrom(dplyr,case_when)
-importFrom(dplyr,distinct)
-importFrom(dplyr,filter)
-importFrom(dplyr,group_by)
-importFrom(dplyr,left_join)
-importFrom(dplyr,mutate)
-importFrom(dplyr,row_number)
-importFrom(dplyr,ungroup)
-importFrom(parallel,makeCluster)
-importFrom(parallel,stopCluster)
-importFrom(stats,as.dist)
-importFrom(stats,density)
-importFrom(stats,ecdf)
-importFrom(stats,median)
-importFrom(stats,runif)
-importFrom(stats,setNames)
+importFrom(dplyr,
+  "%>%",
+  arrange,
+  case_when,
+  distinct,
+  filter,
+  group_by,
+  left_join,
+  mutate,
+  row_number,
+  ungroup
+)
+importFrom(parallel,
+  makeCluster,
+  stopCluster
+)
+importFrom(stats,
+  as.dist,
+  density,
+  ecdf,
+  median,
+  runif,
+  setNames
+)
 useDynLib(SelectSim, .registration = TRUE)
